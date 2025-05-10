@@ -9,6 +9,7 @@ __pycache__/
 *.egg-info/
 *.egg
 *.log
+*.pdf
 *.sqlite3
 *.db
 *.tar.gz
