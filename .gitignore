@@ -10,6 +10,7 @@ __pycache__/
 *.egg
 *.log
 *.pdf
+*.svg
 *.sqlite3
 *.db
 *.tar.gz

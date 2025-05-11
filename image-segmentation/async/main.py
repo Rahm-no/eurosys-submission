@@ -30,7 +30,6 @@ from runtime.distributed_utils import seed_everything, setup_seeds
 from runtime.logging import get_dllogger, mllog_start, mllog_end, mllog_event, mlperf_submission_log, mlperf_run_param_log
 from runtime.callbacks import get_callbacks
 import concurrent.futures
-DATASET_SIZE = 168
 import torch
 import torch.multiprocessing as mp 
 # import torch.distributed as dist
@@ -65,19 +64,19 @@ DATASET_SIZE = 168
 
 
 def main():
-    throughput_file = "/projects/I20240005/rnouaj/image-segmentation/async/results_diff#GPUs_async/4gpus.csv" 
+    throughput_file = "test2.csv"
     with open(throughput_file, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['epoch','iteration','throughput(MBs)', 'iteration_time', 'time_diff', 'iter_persec'])
     
-    accuracy_file = "accuracy_test.csv"
+    accuracy_file = "accuracy_50epochsoffandon.csv"
     with open(accuracy_file, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['epoch', 'accuracy', 'mean dice','l1 dice','l2 dice'])
 
 
     mllog.config(filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'unet3d.log'))
-    mllog.config(filename=os.path.join("results", 'unet3d.log'))
+    mllog.config(filename=os.path.join("/home/rnouaj2/backup_copy/Results_workloads_deucalion/image-segmentation/async/results_metrics", 'unet3d.log'))
     mllogger = mllog.get_mllogger()
     mllogger.logger.propagate = False
     mllog_start(key=constants.INIT_START)
@@ -116,7 +115,7 @@ def main():
     mllog_end(key=constants.INIT_STOP, sync=True)
     mllog_start(key=constants.RUN_START, sync=True)
 
-    train_dataloader, val_dataloader = get_data_loaders(flags, num_shards=world_size, global_rank=local_rank, device=device)
+    train_dataloader, val_dataloader = get_data_loaders(flags, num_shards=world_size, global_rank=local_rank, device=device, slow_queue=slow_queue, slow_processed_queue=slow_processed_queue)
     mllog_event(key='len train_dataloader', value=len(train_dataloader), sync=False)
     mllog_event(key='len val_dataloader', value=len(val_dataloader), sync=False)
 
@@ -160,6 +159,10 @@ def main():
 if __name__ == "__main__":
 
 
+    import torch.multiprocessing as mp
+
+    slow_queue = mp.Queue()
+    slow_processed_queue = mp.Queue()
 
     main()
     print('FINISH')
