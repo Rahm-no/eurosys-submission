@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=pytorch            # Job name
-#SBATCH --output=output_speedytest.log   # Standard output log
+#SBATCH --output=output_xxtest.log   # Standard output log
 #SBATCH --error=error_%j.log          # Error log file
 #SBATCH --nodes=1                     # Number of nodes
 #SBATCH --partition=dev-a100-40       # Partition name

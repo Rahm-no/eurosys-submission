@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=speedy4gpu            # Job name
-#SBATCH --output=speedy4gpu.log   # Standard output log
+#SBATCH --job-name=sxxy4gpu            # Job name
+#SBATCH --output=sxx4gpu.log   # Standard output log
 #SBATCH --error=error_%j.log          # Error log file
 #SBATCH --nodes=1                     # Number of nodes
 #SBATCH --partition=dev-a100-40       # Partition name
