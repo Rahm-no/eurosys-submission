@@ -11,5 +11,5 @@ df2 = pd.read_csv("/projects/I20240005/rnouaj/Speech_recognition/rnnt/pytorch/re
 print("heads", df2.head())
 
 # Filter the DataFrame for 'iteration' <= 900
-df2 = df2[df2['iteration'] <= 900]
+df2 = df2[df2['iteration'] <= 1000]
 

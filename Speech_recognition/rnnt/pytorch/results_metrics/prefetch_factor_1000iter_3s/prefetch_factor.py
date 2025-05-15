@@ -39,7 +39,6 @@ for csv_file, label in zip(csv_files, labels):
 
     # Group by epoch and calculate average throughput(MBs)
     epoch_throughput = df.groupby('iteration')['throughput(MBs)'].mean()
-    epoch_throughput = epoch_throughput * 2
 
 
     # Plot
