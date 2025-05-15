@@ -163,6 +163,7 @@ def benchmark_train_loop(model, loss_func, scaler, epoch, optim, train_dataloade
         M = bbox.shape[0] // N
         bbox = bbox.view(N, M, 4)
         label = label.view(N, M)
+        start_time_training = time.time() 
         
 
         # Training step in a separate stream
@@ -205,6 +206,9 @@ def benchmark_train_loop(model, loss_func, scaler, epoch, optim, train_dataloade
 
         iteration_time = time.time() - start_time
         print(f"Iteration time: {iteration_time}, nbatch {nbatch}")
+        with open('training_time_dali.csv', 'a') as f:
+            f.write([ "iteration_time"])
+            torch.cuda.synchronize()
 
         if nbatch >= args.benchmark_warmup + args.benchmark_iterations:
             break

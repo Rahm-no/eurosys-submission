@@ -795,7 +795,7 @@ def main():
             if time.time() - last_time >= 5:
                 # Calculate number of iterations per second over the last 5 seconds
                 iter_persec = (n - last_step) / (time.time() - last_time)
-                throughput = size / 5
+                throughput = size / (time.time() - last_time)
             
                 
                 with open(throughput_file, 'a', newline='') as f:

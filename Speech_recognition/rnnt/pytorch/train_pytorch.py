@@ -533,7 +533,7 @@ def main():
             
             iteration_duration1 = time.time() - iteration_start_time
             print('iteration duration', iteration_duration1, "iteration", n)
-            if time.time() - last_time >= 2:
+            if time.time() - last_time >= 5:
                 # Calculate number of iterations per second over the last 5 seconds
                 iter_persec = (n - last_step) / (time.time() - last_time)
                 throughput = size / (time.time() - last_time)

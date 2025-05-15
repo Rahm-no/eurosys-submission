@@ -101,4 +101,4 @@ ARGS+=" --beta2=$BETA2"
 [ -n "$MAX_SYMBOL_PER_SAMPLE" ] &&  ARGS+=" --max_symbol_per_sample=$MAX_SYMBOL_PER_SAMPLE"
 
 DISTRIBUTED=${DISTRIBUTED:-"-m torch.distributed.launch --nproc_per_node=$NUM_GPUS"}
-python ${DISTRIBUTED} train_pytorch.py ${ARGS}
+python ${DISTRIBUTED} train.py ${ARGS}

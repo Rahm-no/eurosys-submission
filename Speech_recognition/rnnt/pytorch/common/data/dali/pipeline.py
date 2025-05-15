@@ -32,7 +32,7 @@ def gpu_delay(x,idx):
     """Simulates GPU work by running matrix multiplications for a given time."""
     print("Speedyloader: idx", idx)
 
-    duration_ms = 50 if (idx % 5 != 0) else 1000
+    duration_ms = 50 if (idx % 5 != 0) else 300
     print("duration_ms", duration_ms)
 
     stream = cp.cuda.get_current_stream()

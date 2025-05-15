@@ -15,7 +15,7 @@ def get_train_transforms():
     elastic_deform = ElasticDeformation(alpha=1000, sigma=30)
     heavy_transform = transforms.Compose([heavy_blur, elastic_deform])
     train_transforms = transforms.Compose([
-        rand_flip, cast, rand_scale, rand_noise, heavy_blur, elastic_deform
+        rand_flip, cast, rand_scale, rand_noise, heavy_blur
     ])
     return train_transforms
 

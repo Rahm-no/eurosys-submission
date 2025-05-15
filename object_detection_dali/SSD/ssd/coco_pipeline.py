@@ -230,6 +230,9 @@ class DALICOCOIterator(object):
         self._first_batch = self.next()
 
     def __next__(self):
+        torch.cuda.synchronize()
+        start_time = time.time()
+
         if self._first_batch is not None:
             batch = self._first_batch
             self._first_batch = None
@@ -323,6 +326,12 @@ class DALICOCOIterator(object):
         # Change index for double buffering
         self._current_data_batch = (self._current_data_batch + 1) % 2
         self._counter += self._num_gpus * self.batch_size
+        torch.cuda.synchronize()
+        end_time = time.time()
+        print(f"[DALI] Preprocessing time: {(end_time - start_time)*1000:.2f} ms")
+        with open("dali_time.txt", "a") as f:
+            f.write(f"{(end_time - start_time) * 1000:.2f}\n")
+
         return [db[copy_db_index] for db in self._data_batches]
 
     def next(self):

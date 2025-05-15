@@ -472,8 +472,17 @@ def main():
         size = 0
         last_step =0
         next_batch =None
+           # CUDA events for profiling
+        iter_loader = iter(train_loader)
+        pre_start_event = torch.cuda.Event(enable_timing=True)
+        pre_end_event = torch.cuda.Event(enable_timing=True)
+        train_start_event = torch.cuda.Event(enable_timing=True)
+        train_end_event = torch.cuda.Event(enable_timing=True)
 
-        for batch in train_loader:
+        for i in range(1500):
+            pre_start_event.record()
+
+            batch = next(iter_loader)
             iteration_start_time = time.time()
 
             print("\nSpeedyloader: epoch",epoch, "batch",len(batch))
@@ -487,15 +496,19 @@ def main():
 
             audio, audio_lens, txt, txt_lens = batch
             print("audio in train pytorch", audio.shape,"audio_lens", audio_lens.shape,"txt", txt.shape,"txt_lens", txt_lens.shape)
+
             
          
             feats, feat_lens = train_feat_proc([audio, audio_lens])
+            pre_end_event.record()
 
-
+            train_start_event.record()
             all_feat_lens += feat_lens
             log_probs, log_prob_lens = model(feats, feat_lens, txt, txt_lens)
             loss = loss_fn(log_probs[:, :log_prob_lens.max().item()],
                                       log_prob_lens, txt, txt_lens)
+            train_end_event.record()
+
             
 
 
@@ -519,7 +532,19 @@ def main():
                 epoch_utts += batch[0].size(0) * world_size
                 accumulated_batches += 1
 
-          
+
+
+             # Sync and record profiling times
+            torch.cuda.synchronize()
+            pre_time = pre_start_event.elapsed_time(pre_end_event)
+            train_time = train_start_event.elapsed_time(train_end_event)
+
+            with open("dali_profiling.csv", "a", newline='') as f:
+                writer = csv.writer(f)
+                if step == 1 and epoch == start_epoch + 1:
+                    writer.writerow(["epoch", "step", "preprocessing_ms", "training_ms"])  # Write header once
+                writer.writerow([epoch, step, pre_time, train_time])
+
 
             iteration_duration1 = time.time() - iteration_start_time
             print('iteration duration', iteration_duration1)
@@ -528,7 +553,7 @@ def main():
             if time.time() - last_time >= 5:
                 # Calculate number of iterations per second over the last 5 seconds
                 iter_persec = (n - last_step) / (time.time() - last_time)
-                throughput = (size / (time.time() - last_time) ) *11
+                throughput = (size / (time.time() - last_time) ) #11
             
                 
                 with open(throughput_file, 'a', newline='') as f:

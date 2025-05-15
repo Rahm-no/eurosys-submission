@@ -26,5 +26,17 @@ __pycache__/
 *ckpt*
 *.pt
 *.pth
+*error
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/.gitignore
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/plots_3s.py
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/plots_10s.py
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/convert_csv_1.py
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/convert_csv_speech3s.py
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/convert_csv_speech10s.py
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results_diff_#GPUs_dali
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results_diff_#GPUs_pytorch
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results_diff_#GPUs_speedy
+/home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results_metrics
 object_detection_dali/SSD/resnet152-f82ba261.pth
 object_detection_dali/SSD/resnet50-0676ba61.pth
