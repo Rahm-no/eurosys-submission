@@ -8,3 +8,4 @@ git clone git@github.com:Rahm-no/eurosys-submission.git
 ```bash
 cd image-segmentation
 ```
+3. Follow the readme inside the workload for running the code
