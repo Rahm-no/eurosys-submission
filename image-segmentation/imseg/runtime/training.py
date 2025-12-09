@@ -23,7 +23,9 @@ def get_optimizer(params, flags):
     else:
         raise ValueError("Optimizer {} unknown.".format(flags.optimizer))
     return optim
-
+tags_file = "pytorch_tags_log2.csv"
+with open(tags_file, 'w', newline='') as f:
+    f.write("epoch,iteration,tags\n")
 
 def calculate_tensor_size(tensor):
     num_elements = tensor.numel()  # Total number of elements
@@ -90,7 +92,11 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
         for iteration, batch in enumerate(tqdm(train_loader, disable=(rank != 0) or not flags.verbose)):
             print("image size", calculate_tensor_size(batch[0]))
             print("label size", calculate_tensor_size(batch[1]))
-            image, label = batch
+            image, label,tag = batch
+            print("tag", tag)
+             # write to CSV
+            with open(tags_file, 'a', newline='') as f:
+                f.write(f"{epoch},{iteration},{tag}\n")
             size += calculate_tensor_size(image) + calculate_tensor_size(label)
 
             image, label = image.to(device), label.to(device)

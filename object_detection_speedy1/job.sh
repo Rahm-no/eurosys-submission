@@ -1,12 +1,14 @@
-#!/bin/bash
-#SBATCH --job-name=pytorch            # Job name
-#SBATCH --output=output_xxtest.log   # Standard output log
-#SBATCH --error=error_%j.log          # Error log file
-#SBATCH --nodes=1                     # Number of nodes
-#SBATCH --partition=dev-a100-40       # Partition name
-#SBATCH --time=2:00:00                # Time limit (hh:mm:ss)
-#SBATCH --cpus-per-task=100           # Number of CPU cores
-#SBATCH --account=i20240005g          # Account to charge
+#!/usr/bin/env bash
+#SBATCH --job-name=object-geepafs
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=128
+#SBATCH --output=waft_object_geepafs.txt
+#SBATCH --error=waft_object_geepafs.err
+#SBATCH --gpus=4
+#SBATCH --account=i20240005g
+#SBATCH --time=2:00:00
+#SBATCH --partition=normal-a100-40       
 
 # Load required modules
 module load Python

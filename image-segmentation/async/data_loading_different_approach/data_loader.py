@@ -104,7 +104,7 @@ def get_data_loaders(flags, num_shards, global_rank, device,slow_queue, slow_pro
         raise ValueError(f"Loader {flags.loader} unknown. Valid loaders are: synthetic, pytorch")
 
     train_sampler = DistributedSampler(train_dataset, seed=flags.seed, drop_last=True) if num_shards > 1 else None
-    print(f"Train sampler: {len(train_sampler)}")
+    # print(f"Train sampler: {len(train_sampler)}")
     val_sampler = None
 
 

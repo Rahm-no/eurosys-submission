@@ -63,6 +63,7 @@ from runtime.callbacks import get_callbacks
 DATASET_SIZE = 168
 
 
+
 def main():
     throughput_file = "test2.csv"
     with open(throughput_file, 'w', newline='') as csvfile:
@@ -76,7 +77,6 @@ def main():
 
 
     mllog.config(filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'unet3d.log'))
-    mllog.config(filename=os.path.join("/home/rnouaj2/backup_copy/Results_workloads_deucalion/image-segmentation/async/results_metrics", 'unet3d.log'))
     mllogger = mllog.get_mllogger()
     mllogger.logger.propagate = False
     mllog_start(key=constants.INIT_START)
@@ -153,17 +153,29 @@ def main():
 
 
 
- 
+import os
+import signal
+import psutil  # pip install psutil
+
+def force_kill_children():
+    parent = psutil.Process(os.getpid())
+    children = parent.children(recursive=True)
+    print("Collecting child processes")
+    for child in children:
+        child.kill()
+
 
 
 if __name__ == "__main__":
+    try:
+        import torch.multiprocessing as mp
 
+        slow_queue = mp.Queue()
+        slow_processed_queue = mp.Queue()
 
-    import torch.multiprocessing as mp
+        main()
+    finally:
+        clean()
+        force_kill_children()
 
-    slow_queue = mp.Queue()
-    slow_processed_queue = mp.Queue()
-
-    main()
-    print('FINISH')
-    clean()
+    

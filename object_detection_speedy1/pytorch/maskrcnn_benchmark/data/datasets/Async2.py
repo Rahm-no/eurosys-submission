@@ -134,62 +134,84 @@ class AsynchronousLoader:
 
     
 
-   
+    
+    def collect_batch_data(self, save_folder="batch_logs"):
+        # 1. Ensure the folder exists
+        os.makedirs(save_folder, exist_ok=True)
 
-    def collect_batch_data(self):
-        """ Preload data into double buffers to reduce wait time during training """
+        # 2. Create full path for CSV file inside that folder
+        csv_filename = os.path.join(save_folder, f"batch_composition_rank{self.rank}.csv")
+
+        file_exists = os.path.isfile(csv_filename)
+        csv_file = open(csv_filename, 'a', newline='')
+        csv_writer = csv.writer(csv_file)
+        if not file_exists:
+            csv_writer.writerow(['batch_id', 'batch_composition'])
+
+        batch_id = 0
+
         while True:
             batch_data = []
-            
+            batch_types = []
+
             while len(batch_data) < self.batch_size:
                 if self.queue.empty() and self.queue_timeout.empty():
                     time.sleep(0.1)
                     continue
-                
+
                 if not self.queue.empty():
                     item = self.queue.get()
                     if item is None:
                         print("Received sentinel. Exiting training loop.")
+                        csv_file.close()
                         return
-                    
+
                     image, target, idx = item
                     if not isinstance(image, torch.Tensor):
                         continue
-                    
-                    batch_data.append(item)
 
-                if not self.queue_timeout.empty() and self.queue_timeout.qsize() > 10:
+                    batch_data.append(item)
+                    batch_types.append('S')
+
+                elif not self.queue_timeout.empty() and self.queue_timeout.qsize() > 1:
                     item = self.queue_timeout.get()
                     if item is None:
                         print("Received sentinel from timeout queue. Exiting training loop.")
+                        csv_file.close()
                         return
-                    
+
                     image, target, idx = item
                     if not isinstance(image, torch.Tensor):
                         continue
-                    
-                    batch_data.append(item)
 
-                if len(batch_data) < self.batch_size and self.queue.empty() and self.queue_timeout.empty():
-                    time.sleep(0.01)
-            
+                    batch_data.append(item)
+                    batch_types.append('L')
+
+                else:
+                    if len(batch_data) < self.batch_size and self.queue.empty() and self.queue_timeout.empty():
+                        time.sleep(0.01)
+
             if not batch_data:
+                csv_file.close()
                 return
-            
+
             batch_data = collator(batch_data)
-            
+
             if self.pin_memory:
                 batch_data = self._move_to_pinned_memory(batch_data)
 
+            # Write batch composition to CSV
+            batch_comp_str = ' '.join(batch_types)
+            csv_writer.writerow([batch_id, batch_comp_str])
+            csv_file.flush()
 
-            # Ensure the batch queue does not overload
+            batch_id += 1
+
             while self.batch_queue.qsize() > 450:
                 print(f"Batch queue almost full (size: {self.batch_queue.qsize()}). Pausing...")
                 time.sleep(1)
-            
 
-            print("add to the batch queue", self.batch_queue.qsize())
-            
+            print(f"[Rank {self.rank}] Added batch {batch_id} with composition: {batch_comp_str} to batch queue")
             self.batch_queue.put(batch_data)
 
     def _move_to_pinned_memory(self, batch):

@@ -326,21 +326,36 @@ def main():
         else:
             log_end(key=constants.RUN_STOP, metadata={"status": "aborted"})
 
+import os
+import signal
+import psutil  # pip install psutil
+
+def force_kill_children():
+    parent = psutil.Process(os.getpid())
+    children = parent.children(recursive=True)
+    print("Collecting child processes")
+    for child in children:
+        child.kill()
+
 
 if __name__ == "__main__":
     #mp.set_start_method('spawn')
+    try:
 
 
-    throughput_file = 'throughput_log_pytorch_accuracy.csv'
+        throughput_file = 'throughput_log_pytorch_accuracy.csv'
 
-    with open(throughput_file, 'a', newline='') as csvfile:
-        csv_writer = csv.writer(csvfile)
-        
-        # Add a header if the file is empty (optional).
-        if csvfile.tell() == 0:
-            csv_writer.writerow(['Iteration', 'time', 'Cum Avg Throughput'])
+        with open(throughput_file, 'a', newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            
+            # Add a header if the file is empty (optional).
+            if csvfile.tell() == 0:
+                csv_writer.writerow(['Iteration', 'time', 'Cum Avg Throughput'])
 
 
-    start = time.time()
-    main()
-    print("&&&& MLPERF METRIC TIME=", time.time() - start)
+        start = time.time()
+        main()
+
+        print("&&&& MLPERF METRIC TIME=", time.time() - start)
+    finally:
+        force_kill_children()

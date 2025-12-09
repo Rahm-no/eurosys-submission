@@ -100,7 +100,7 @@ def do_train(
     logger = logging.getLogger("maskrcnn_benchmark.trainer")
     logger.info("Start training")
     meters = MetricLogger(delimiter="  ")
-    max_iter = 144
+    max_iter = 14400
     start_iter = arguments["iteration"]
     print("start_iter",start_iter)
     model.train()

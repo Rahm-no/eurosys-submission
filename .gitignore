@@ -10,11 +10,15 @@ __pycache__/
 *.egg
 *.log
 *.pdf
+*.png
 *.svg
 *.sqlite3
 *.db
 *.tar.gz
 *.zip
+*.err
+*.csv
+*.txt
 *.tar
 *.tar.bz2
 *.tar.xz
@@ -40,3 +44,4 @@ __pycache__/
 /home/rnouaj2/backup_copy/Results_workloads_deucalion/Speech_recognition/rnnt/pytorch/results_metrics
 object_detection_dali/SSD/resnet152-f82ba261.pth
 object_detection_dali/SSD/resnet50-0676ba61.pth
+/projects/I20240005/rnouaj/backup_copy/Results_workloads_deucalion/fraction_microbenchmark/Speech_recognition/rnnt/pytorch/results/

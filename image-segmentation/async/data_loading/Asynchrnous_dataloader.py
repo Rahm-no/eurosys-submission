@@ -5,7 +5,7 @@ import torch
 import os
 import numpy as np
 from queue import Full, Empty
-import multiprocessing as mp
+import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
 import psutil
 from runtime.distributed_utils import get_rank, get_world_size
@@ -29,6 +29,7 @@ class DataProducer(mp.Process):
         self.sampler = sampler
         self.queue_size = queue_size
         self.num_workers = num_workers
+        print("Num_workers", self.num_workers)
 
 
         self.rank = get_rank()  # Get the GPU rank for this producer
@@ -50,17 +51,22 @@ class DataProducer(mp.Process):
 
                 print(f"[GPU Rank {self.rank} | Producer {self.pid}] Processing index {idx}")
                 sample = self.dataset[idx]
-                batch.append(sample)
-                num_processed += 1
+                if sample is None:
+                    print(f"skip sample {idx}")
+                    continue
+                else:
+                    self.queue.put(sample)
+            #     batch.append(sample)
+            #     num_processed += 1
 
-                # When batch reaches the desired size, add it to the queue
-                if len(batch) == self.batch_size:
-                    self.put_batch(batch)
-                    batch = []
+            #     # When batch reaches the desired size, add it to the queue
+            #     if len(batch) == self.batch_size:
+            #         self.put_batch(batch)
+            #         batch = []
 
-            # If any leftover batch, add to the queue
-            if batch and not data_stop_event.is_set():
-                self.put_batch(batch)
+            # # If any leftover batch, add to the queue
+            # if batch and not data_stop_event.is_set():
+            #     self.put_batch(batch)
 
             print(f"[GPU Rank {self.rank} | Producer {self.pid}] Finished epoch with {num_processed} samples.")
             data_resume_event.clear()  # Pause the producer until more space is available in the queue
@@ -78,7 +84,7 @@ class DataProducer(mp.Process):
             batch_labels_tensor = torch.stack(labels)
 
             # Attempt to add the batch to the queue without sleep
-            if self.queue.qsize() < 20:  # Ensure it doesn't exceed 11
+            if self.queue.qsize() < 40:  # Ensure it doesn't exceed 11
                 try:
                     # Try to put data in the queue
                     self.queue.put((batch_images_tensor, batch_labels_tensor), timeout=1)
@@ -97,7 +103,7 @@ class DataProducer(mp.Process):
 
 
 class AsynchronousLoader(DataLoader):
-    def __init__(self, dataset, device, shards, rank, batch_size=1, shuffle=False, pin_memory=True, num_workers=1, queue_size=50, drop_last=True, sampler=None):
+    def __init__(self, dataset, device, shards, rank, slow_processed_queue, batch_size=1, shuffle=False, pin_memory=True, num_workers=1, queue_size=50, drop_last=True, sampler=None):
         super().__init__(dataset=dataset, batch_size=batch_size, shuffle=shuffle, pin_memory=pin_memory, num_workers=0, drop_last=drop_last, sampler=sampler)
         self.queue_size = queue_size
       
@@ -106,6 +112,7 @@ class AsynchronousLoader(DataLoader):
         self.num_workers = num_workers
         self.world_size = get_world_size()
         self.rank = rank
+        self.slow_processed_queue = slow_processed_queue
 
         self.epoch_batches = len(self.dataset) // (self.batch_size * self.world_size)  # Total batches per epoch
         
@@ -173,34 +180,109 @@ class AsynchronousLoader(DataLoader):
         print("Starting new epoch for rank:", self.rank, "queue size", self.queue.qsize)
 
         return self
-    def __next__(self):
-        print("Batch processed:", self.batches_processed, "for rank:", self.rank, "epoch batches:", self.epoch_batches)
+    # def __next__(self):
+    #     print("Batch processed:", self.batches_processed, "for rank:", self.rank, "epoch batches:", self.epoch_batches)
         
-        if self.batches_processed >= self.epoch_batches -1 :
-            print('RAISE StopIteration')
+    #     if self.batches_processed >= self.epoch_batches -1 :
+    #         print('RAISE StopIteration')
 
     
+    #         raise StopIteration  # End of epoch
+
+
+    #     while True:
+    #         try:
+    #             if 
+    #             # Print the queue size specific to this GPU rank
+    #             print(f"Queue size for GPU {self.rank}: {self.queue.qsize()} samples")
+
+    #             # Get a batch from the queue
+    #             batch = self.queue.get(timeout=1)
+    #             self.batches_processed += 1
+
+    #             # Print the processed batch info
+    #             print(f"[GPU Rank {self.rank}] Processed batch {self.batches_processed}.")
+                
+    #             return batch
+
+    #         except Empty:
+    #             # If the queue is empty and the stop event is set, break the loop
+    #             if data_stop_event.is_set():
+    #                 print("Stopping iteration due to stop event.")
+    #                 break
+    # from queue import Empty
+# from queue import Empty
+
+    import random
+    from queue import Empty
+
+    def __next__(self):
+        print("Batch processed:", self.batches_processed, "for rank:", self.rank, "epoch batches:", self.epoch_batches)
+
+        if self.batches_processed >= self.epoch_batches:
+            print('RAISE StopIteration')
             raise StopIteration  # End of epoch
 
+        batch = []
 
-        while True:
+        while len(batch) < self.batch_size:
             try:
-                # Print the queue size specific to this GPU rank
-                print(f"Queue size for GPU {self.rank}: {self.queue.qsize()} samples")
+                # Randomly decide which queue to try first
+                if random.random() < 0.5:
+                    # Try slow first
+                    if not self.slow_processed_queue.empty():
+                        slow_sample = self.slow_processed_queue.get(timeout=1)
+                        if slow_sample is not None:
+                            batch.append((slow_sample, 'L'))
+                            print(f"[GPU Rank {self.rank}] Picked slow sample, current batch size: {len(batch)}")
+                            continue  # go to next iteration if successful
 
-                # Get a batch from the queue
-                batch = self.queue.get(timeout=1)
-                self.batches_processed += 1
+                    # fallback to fast
+                    if not self.queue.empty():
+                        sample = self.queue.get(timeout=1)
+                        if sample is not None:
+                            batch.append((sample, 'S'))
+                            print(f"[GPU Rank {self.rank}] Picked fast sample, current batch size: {len(batch)}")
 
-                # Print the processed batch info
-                print(f"[GPU Rank {self.rank}] Processed batch {self.batches_processed}.")
-                
-                return batch
+                else:
+                    # Try fast first
+                    if not self.queue.empty():
+                        sample = self.queue.get(timeout=1)
+                        if sample is not None:
+                            batch.append((sample, 'S'))
+                            print(f"[GPU Rank {self.rank}] Picked fast sample, current batch size: {len(batch)}")
+                            continue
+
+                    # fallback to slow
+                    if not self.slow_processed_queue.empty():
+                        slow_sample = self.slow_processed_queue.get(timeout=1)
+                        if slow_sample is not None:
+                            batch.append((slow_sample, 'L'))
+                            print(f"[GPU Rank {self.rank}] Picked slow sample, current batch size: {len(batch)}")
 
             except Empty:
-                # If the queue is empty and the stop event is set, break the loop
                 if data_stop_event.is_set():
-                    print("Stopping iteration due to stop event.")
-                    break
+                    print("Stopping iteration due to stop event and empty queues.")
+                    if not batch:
+                        raise StopIteration
+                    else:
+                        break
+                else:
+                    print(f"[GPU Rank {self.rank}] Waiting for samples...")
 
+        # Unpack into images, labels, and tags
+        images, labels, tags = zip(*[(s[0], s[1], t) for s, t in batch])
 
+        images = [torch.from_numpy(img) for img in images]
+        labels = [torch.from_numpy(lbl) if isinstance(lbl, np.ndarray) else lbl for lbl in labels]
+
+        batch_images_tensor = torch.stack(images)
+        batch_labels_tensor = torch.stack(labels)
+
+        if batch_images_tensor.size(0) == self.batch_size:
+            self.batches_processed += 1
+            print(f"[GPU Rank {self.rank}] Completed batch {self.batches_processed}. Batch size: {batch_images_tensor.size(0)}")
+            return batch_images_tensor, batch_labels_tensor, list(tags)
+        else:
+            print(f"[GPU Rank {self.rank}] Incomplete batch (size {batch_images_tensor.size(0)}), retrying...")
+            return self.__next__()  # Retry until a full batch

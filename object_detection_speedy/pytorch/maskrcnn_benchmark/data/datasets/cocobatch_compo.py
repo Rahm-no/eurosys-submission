@@ -192,184 +192,48 @@ import multiprocessing
 import queue
 import signal
 import time
-
-class TimeoutException(Exception):
-    pass
-
-def timeout_handler(signum, frame):
-    raise TimeoutException("Transform execution exceeded the timeout!")
-
-def run_transform(transform, image, target, result_queue):
-    """
-    Executes the transform and puts the result into the queue.
-    """
-    try:
-        # print("Image input before transform:", image)
-        # print(f"Transform {transform} started.")
-        result = transform(image, target)
-        if result == (None, "Timeout"):
-            return result_queue.put((None, "timeout"))
-        
-        result_queue.put((result, None))  # Enqueue result and no error
-        # print(f"Transform {transform} completed and result enqueued {result}.")
-    except Exception as e:
-        print(f"Transform {transform} encountered an error: {e}")
-        result_queue.put((None, e))  # Enqueue no result and the error
-
-def run_with_timeout(transform, image, target, timeout):
-    """
-    Runs the transform with a timeout using signals.
-    Ensures success status always has a valid result.
-    """
-    result_queue = queue.Queue(maxsize=1)  # Standard library queue for simplicity
-
-    def wrapper():
-        run_transform(transform, image, target, result_queue)
-
-    # Set up signal handler for timeout
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.setitimer(signal.ITIMER_REAL, timeout)  # Start timer with sub-second precision
-
-    try:
-        wrapper()  # Run the transform function
-    except TimeoutException as e:
-        print(f"Timeout occurred: {e}")
-        return None, "timeout"  
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return None, "Error" 
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)  # Cancel the timer in all cases
-
-    # Process result from the queue
-    try:
-        result, error = result_queue.get_nowait()  # Get the result from the queue
-        if error and result is None:
-            print(f"Transform {transform} failed with error: {error}")
-            return None, f"Error: {error}"  
-        
-        # print(f"Transform {transform} succeeded with result: {result}")
-        return result, "Success"
-    except queue.Empty:
-        # print(f"Transform {transform} completed but did not enqueue any result.")
-        return None, "No Result"  
-
-
-
-import torch.multiprocessing as mp
 import time
 
-
-class Compose(object):
-    def __init__(self, transforms, queue_timeout=None, timeouts=[0.5, 0.5, 0.5, 0.5]):
-        """
-        Initialize Compose with a list of transforms and an optional timeout.
-        """
+class Compose:
+    def __init__(self, transforms, timeouts=None):
         self.transforms = transforms
-        self.queue_timeout = queue_timeout 
-        self.timeouts = timeouts  # Timeout in seconds
-        self.task_queue = multiprocessing.Queue()
-        self.timeout_process = None
-
-    def start_timeout_process(self):
-        if self.timeout_process is None or not self.timeout_process.is_alive():
-            self.timeout_process = mp.Process(
-                target=self.process_remaining_transforms)
-            self.timeout_process.start()
-
-
+        self.timeouts = timeouts or [None] * len(transforms)  # None = no timeout
 
     def __call__(self, image, target):
-       
+        # timing + tag
+        if "preproc_start" not in target:
+            target["preproc_start"] = time.perf_counter()
+        target.setdefault("is_long", False)
+
         for i, (t, timeout) in enumerate(zip(self.transforms, self.timeouts)):
+            if timeout is None:
+                # normal path
+                image, target = t(image, target)
+                continue
+
+            # 1) try with timeout (detect long)
             result, status = run_with_timeout(t, image, target, timeout)
-            print("Result in Compose:", result, "Status:", status)
+
             if status == "Success":
                 image, target = result
 
             elif "timeout" in status:
-                print(f"Transform {i} {t} for image exceeded timeout. Spawning parallel process for remaining transforms.")
-                self.start_timeout_process()  # Ensure the process is running when needed
-                self.task_queue.put((image, target, i))
-                return None, None
-                
+                # 2) mark long and finish **synchronously** (no preemption, no queue)
+                target["is_long"] = True
+                image, target = t(image, target)
 
-            elif "Error" in status:
-                print(f"Transform {t} failed with an error.")
-                return None, None
-        
-        else:
-            image , target = t(image, target)
+            else:  # error
+                target["preproc_end"] = time.perf_counter()
+                target["preproc_dur"] = float(target["preproc_end"] - target["preproc_start"])
+                target["error"] = f"transform_{i}:{t}"
+                return None, None  # or raise
 
-        print("the return statement ", type(image))    
+        # done
+        target["preproc_end"] = time.perf_counter()
+        target["preproc_dur"] = float(target["preproc_end"] - target["preproc_start"])
         return image, target
 
 
-        
-
-    def process_remaining_transforms(self):
-        """
-        Apply remaining transforms and put results into the queue.
-        Signal completion using the done_event.
-        """
-        while True:
-            
-            item = self.task_queue.get()
-            if item is None:
-                print("[timeout_worker] Received sentinel => shutting down.")
-                break
-
-            # item should be (image, target)
-            print("task queue dequeued")
-            image, target, i = item
-            try:
-                print("self.transforms", self.transforms)
-                for t in self.transforms[i:]:
-                    print(f"Applying remaining transform: {t}, image: {type(image)}, target: {type(target)}")
-                    image, target = t(image, target)
-                    print(f"After transform {t}: image: {type(image)}, target: {type(target)}")
-
-                # image = image.numpy()
-                # target = {key: value.numpy() for key, value in target.items()}
-                
-                
-                batch = image, target, i
-                while self.queue_timeout.qsize() >= 190 :  # Maximum queue size
-                    print(f"Timeout Queue full (size: {self.queue_timeout.qsize()}). Pausing...")
-                    time.sleep(0.05)  # Wait for 0.5 seconds before checking again
-                self.queue_timeout.put(batch)
-                print("Adding image and target to the timeout queue.", self.queue_timeout.qsize())
-
-            except Exception as e:
-                print(f"Error in process_remaining_transforms: {e}")
-        def __repr__(self):
-            format_string = self.__class__.__name__ + "("
-            for t in self.transforms:
-                format_string += "\n"
-                format_string += "    {0}".format(t)
-            format_string += "\n)"
-            return format_string
-
-        
-
-
-# class Compose(object):
-#     def __init__(self, transforms, queue_timeout):
-#         self.transforms = transforms
-
-#     def __call__(self, image, target):
-#         for t in self.transforms:
-#             print("transformations in compose", t)
-#             image, target = t(image, target)
-#         return image, target
-
-#     def __repr__(self):
-#         format_string = self.__class__.__name__ + "("
-#         for t in self.transforms:
-#             format_string += "\n"
-#             format_string += "    {0}".format(t)
-#         format_string += "\n)"
-#         return format_string
 import random
 import time
 import torch

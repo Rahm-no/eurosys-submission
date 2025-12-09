@@ -39,6 +39,10 @@ def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
     for param_group in optimizer.param_groups:
         param_group["lr"] = init_lr + (lr - init_lr) * scale
 
+tags_file = "speed_tags_log.csv"
+with open(tags_file, 'w', newline='') as f:
+    f.write("epoch,iteration,tags\n")
+
 
 def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, callbacks, is_distributed, throughput_file, accuracy_file):
     rank = get_rank()
@@ -90,8 +94,10 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
         for iteration, batch in enumerate(tqdm(train_loader, disable=(rank != 0) or not flags.verbose)):
             if batch is None:
                 continue
-            image, label = batch
+            image, label, tags = batch
             size += calculate_tensor_size(image) + calculate_tensor_size(label)
+            with open(tags_file, 'a', newline='') as f:
+                f.write(f"{epoch},{iteration},{tags}\n")
 
             image, label = image.to(device), label.to(device)
             print(f"Image dtype: {image.dtype}, shape: {image.shape}")

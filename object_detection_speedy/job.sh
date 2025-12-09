@@ -1,14 +1,14 @@
-#!/bin/bash
-#SBATCH --job-name=pytorch            # Job name
-#SBATCH --output=pref12.log   # Standard output log
-#SBATCH --error=error_%j.log          # Error log file
-#SBATCH --nodes=1                     # Number of nodes
-#SBATCH --partition=normal-a100-40      # Partition name
-#SBATCH --time=48:00:00                # Time limit (hh:mm:ss)
-#SBATCH --cpus-per-task=100           # Number of CPU cores
-#SBATCH --account=i20240005g          # Account to charge
-
-# Load required modules
+#!/usr/bin/env bash
+#SBATCH --job-name=object-geepafs
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=128
+#SBATCH --output=waft_object_geepafs.txt
+#SBATCH --error=waft_object_geepafs.err
+#SBATCH --gpus=4
+#SBATCH --account=i20240005g
+#SBATCH --time=2:00:00
+#SBATCH --partition=normal-a100-40
 module load Python
 
 # # Run the monitoring script in the background & save output to a file
@@ -19,7 +19,7 @@ module load Python
 singularity exec --nv \
     --bind /projects:/projects \
     --bind /projects/I20240005/coco:/projects/I20240005/coco \
-    /projects/I20240005/rnouaj/object_detection_speedy/singularity_object_detection.sif \
+    /projects/I20240005/rnouaj/singularity_images/singularity_object_detection.sif\
     bash -c "./run_and_time.sh"
 
 # # Stop the monitoring script after training finishes

@@ -234,7 +234,7 @@ class AsynchronousLoader(DataLoader):
                 print(f"[GPU Rank {self.rank}] Fast queue empty.")
 
             # 2. Independently check if slow queue has > 5 items and fetch from it too
-            if self.slow_processed_queue.qsize() > 5 and len(batch) < self.batch_size:
+            if self.slow_processed_queue.qsize() > 1:
                 try:
                     slow_sample = self.slow_processed_queue.get(timeout=1)
                     if slow_sample is not None:
@@ -244,7 +244,7 @@ class AsynchronousLoader(DataLoader):
                     print(f"[GPU Rank {self.rank}] Expected slow sample, but slow queue was empty.")
 
             # 3. Handle idle case
-            if sample is None and self.slow_processed_queue.qsize() <= 5:
+            if sample is None and self.slow_processed_queue.qsize() <= 1:
                 if data_stop_event.is_set():
                     print("Stopping iteration due to stop event and empty queues.")
                     if not batch:

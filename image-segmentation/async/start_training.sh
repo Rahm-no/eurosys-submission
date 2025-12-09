@@ -15,6 +15,7 @@ CONTAINER_NAME=${2:-train_imseg}
 BATCH_SIZE=${3:-2}
 DOCKER_MEMORY=${4:-""}
 
+
 DOCKER_MEMORY_PARAM=
 
 if [ ! -z "$DOCKER_MEMORY" ]; then
@@ -30,4 +31,3 @@ sudo docker run -it --ipc=host --name="$CONTAINER_NAME" --rm --runtime=nvidia $D
     unet3d:speedy bash
 
 
-#-v /raid/data/unet3d/29gb-npy-prepp/:/data \

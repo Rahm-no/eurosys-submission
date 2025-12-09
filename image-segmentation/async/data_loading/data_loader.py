@@ -90,7 +90,7 @@ class SyntheticDataset(Dataset):
 
 
 
-def get_data_loaders(flags, num_shards, global_rank, device):
+def get_data_loaders(flags, num_shards, global_rank, device,slow_queue, slow_processed_queue):
     if flags.loader == "synthetic":
         train_dataset = SyntheticDataset(scalar=True, shape=flags.input_shape, layout=flags.layout)
         val_dataset = SyntheticDataset(scalar=True, shape=flags.val_input_shape, layout=flags.layout)
@@ -98,19 +98,20 @@ def get_data_loaders(flags, num_shards, global_rank, device):
     elif flags.loader == "pytorch":
         x_train, x_val, y_train, y_val = get_data_split(flags.data_dir, num_shards, shard_id=global_rank)
         train_data_kwargs = {"patch_size": flags.input_shape, "oversampling": flags.oversampling, "seed": flags.seed}
-        train_dataset = PytTrain(x_train, y_train, **train_data_kwargs)
+        train_dataset = PytTrain(x_train, y_train,slow_queue,slow_processed_queue, **train_data_kwargs)
         val_dataset = PytVal(x_val, y_val)
     else:
         raise ValueError(f"Loader {flags.loader} unknown. Valid loaders are: synthetic, pytorch")
 
     train_sampler = DistributedSampler(train_dataset, seed=flags.seed, drop_last=True) if num_shards > 1 else None
+    print(f"Train sampler: {len(train_sampler)}")
     val_sampler = None
 
 
     # train_dataloader = DataLoader(train_dataset,batch_size=flags.batch_size,shuffle=not flags.benchmark and train_sampler is None,sampler=train_sampler,num_workers=flags.num_workers,pin_memory=True,drop_last=True)
 
-    train_dataloader = AsynchronousLoader(train_dataset, device=device,  shards = num_shards,  sampler=train_sampler, batch_size=flags.batch_size, shuffle = not flags.benchmark and train_sampler is None, pin_memory=True,    num_workers=flags.num_workers, rank = global_rank)
-    val_dataloader = AsynchronousLoader(val_dataset, device=device,  shards = 1,  sampler = val_sampler,batch_size=1, shuffle=False, num_workers=1, rank=global_rank)
+    train_dataloader = AsynchronousLoader(train_dataset, device=device,  shards = num_shards,  sampler=train_sampler, batch_size=flags.batch_size, shuffle = not flags.benchmark and train_sampler is None, pin_memory=True,    num_workers=flags.num_workers, rank = global_rank, slow_processed_queue=slow_processed_queue)
+    val_dataloader = AsynchronousLoader(val_dataset, device=device,  shards = 1,  sampler = val_sampler,batch_size=1, shuffle=False, num_workers=1, rank=global_rank, slow_processed_queue=slow_processed_queue)
     # val_dataloader = DataLoader(val_dataset,batch_size=1,shuffle= False,sampler=val_sampler,num_workers=1,pin_memory=True,drop_last=False)
 
     return train_dataloader, val_dataloader

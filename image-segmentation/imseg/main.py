@@ -27,7 +27,7 @@ def main():
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['epoch','iteration','throughput(MBs)', 'iteration_time', 'time_diff', 'iter_persec'])
     
-    accuracy_file =  "test.csv"
+    accuracy_file =  "test2.csv"
     with open(accuracy_file, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['epoch', 'accuracy', 'mean dice','l1 dice','l2 dice'])

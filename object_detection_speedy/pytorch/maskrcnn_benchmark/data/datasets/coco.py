@@ -302,22 +302,62 @@ filelock = multiprocessing.Lock()
 
 
 #FOR PYTORCH 
-class Compose(object):
-    def __init__(self, transforms):
+# class Compose(object):
+#     def __init__(self, transforms):
+#         self.transforms = transforms
+
+#     def __call__(self, image, target):
+#         for t in self.transforms:
+#             image, target = t(image, target)
+#         return image, target
+
+#     def __repr__(self):
+#         format_string = self.__class__.__name__ + "("
+#         for t in self.transforms:
+#             format_string += "\n"
+#             format_string += "    {0}".format(t)
+#         format_string += "\n)"
+#         return format_string
+import time
+
+class Compose:
+    def __init__(self, transforms, timeouts=None):
         self.transforms = transforms
+        self.timeouts = timeouts or [None] * len(transforms)  # None = no timeout
 
     def __call__(self, image, target):
-        for t in self.transforms:
-            image, target = t(image, target)
-        return image, target
+        # timing + tag
+        if "preproc_start" not in target:
+            target["preproc_start"] = time.perf_counter()
+        target.setdefault("is_long", False)
 
-    def __repr__(self):
-        format_string = self.__class__.__name__ + "("
-        for t in self.transforms:
-            format_string += "\n"
-            format_string += "    {0}".format(t)
-        format_string += "\n)"
-        return format_string
+        for i, (t, timeout) in enumerate(zip(self.transforms, self.timeouts)):
+            if timeout is None:
+                # normal path
+                image, target = t(image, target)
+                continue
+
+            # 1) try with timeout (detect long)
+            result, status = run_with_timeout(t, image, target, timeout)
+
+            if status == "Success":
+                image, target = result
+
+            elif "timeout" in status:
+                # 2) mark long and finish **synchronously** (no preemption, no queue)
+                target["is_long"] = True
+                image, target = t(image, target)
+
+            else:  # error
+                target["preproc_end"] = time.perf_counter()
+                target["preproc_dur"] = float(target["preproc_end"] - target["preproc_start"])
+                target["error"] = f"transform_{i}:{t}"
+                return None, None  # or raise
+
+        # done
+        target["preproc_end"] = time.perf_counter()
+        target["preproc_dur"] = float(target["preproc_end"] - target["preproc_start"])
+        return image, target
 
 
 class Resize(object):

@@ -1,3 +1,4 @@
+
 import random
 import numpy as np
 import scipy.ndimage
@@ -5,60 +6,14 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import os
 from runtime.logging import mllog_event
-import concurrent.futures
-import time  # also needed since you call time.time()
-
+import torch.multiprocessing as mp
 def get_train_transforms():
     rand_flip = RandFlip()
     cast = Cast(types=(np.float32, np.uint8))
     rand_scale = RandomBrightnessAugmentation(factor=0.3, prob=0.1)
     rand_noise = GaussianNoise(mean=0.0, std=0.1, prob=0.1)
-    heavy_blur = HeavyGaussianBlur(sigma_range=(1, 5))
-    elastic_deform = ElasticDeformation(alpha=1000, sigma=30)
-    heavy_transform = transforms.Compose([heavy_blur, elastic_deform])
-    train_transforms = transforms.Compose([
-        rand_flip, cast, rand_scale, rand_noise
-    ])
+    train_transforms = transforms.Compose([rand_flip, cast, rand_scale, rand_noise])
     return train_transforms
-
-
-class HeavyGaussianBlur:
-    def __init__(self, sigma_range=(1, 5)):
-        self.sigma_range = sigma_range
-
-    def __call__(self, data):
-        sigma = np.random.uniform(*self.sigma_range)
-        image = data["image"]
-        for c in range(image.shape[0]):
-            image[c] = scipy.ndimage.gaussian_filter(image[c], sigma=sigma)
-        data["image"] = image
-        return data
-
-
-class ElasticDeformation:
-    def __init__(self, alpha, sigma):
-        self.alpha = alpha
-        self.sigma = sigma
-
-    def __call__(self, data):
-        image = data["image"]
-        shape = image.shape[1:]
-
-        # Generate random displacement fields
-        dx = scipy.ndimage.gaussian_filter((np.random.rand(*shape) * 2 - 1), self.sigma) * self.alpha
-        dy = scipy.ndimage.gaussian_filter((np.random.rand(*shape) * 2 - 1), self.sigma) * self.alpha
-        dz = scipy.ndimage.gaussian_filter((np.random.rand(*shape) * 2 - 1), self.sigma) * self.alpha
-
-        # Create meshgrid
-        x, y, z = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
-        indices = (x + dx).reshape(-1), (y + dy).reshape(-1), (z + dz).reshape(-1)
-
-        # Apply deformation
-        for c in range(image.shape[0]):
-            image[c] = scipy.ndimage.map_coordinates(image[c], indices, order=1, mode='reflect').reshape(shape)
-
-        data["image"] = image
-        return data
 
 
 class RandBalancedCrop:
@@ -68,11 +23,9 @@ class RandBalancedCrop:
 
     def __call__(self, data):
         image, label = data["image"], data["label"]
-        for i in range(1):
-            image_new, label_new, cords_new = self.rand_foreg_cropd(image, label)
-        
-            image1, label1, cords1 = self._rand_crop(image, label)
-        print("image_new.shape", image_new.shape)
+        image_new, label_new, cords_new = self.rand_foreg_cropd(image, label)
+    
+        image1, label1, cords1 = self._rand_crop(image, label)
         data.update({"image": image_new, "label": label_new})
         return data
 
@@ -85,7 +38,6 @@ class RandBalancedCrop:
 
     def _rand_crop(self, image, label):
         ranges = [s - p for s, p in zip(image.shape[1:], self.patch_size)]
-        print("ranges", ranges)
         cord = [self.randrange(x) for x in ranges]
         low_x, high_x = self.get_cords(cord, 0)
         low_y, high_y = self.get_cords(cord, 1)
@@ -161,10 +113,10 @@ class RandomBrightnessAugmentation:
 
     def __call__(self, data):
         image = data["image"]
-        for i in range(1):
-            factor = np.random.uniform(low=1.0-self.factor, high=1.0+self.factor, size=1)
-            image = (image * (1 + factor)).astype(image.dtype)
-            data.update({"image": image})
+        # for i in range(10):
+        factor = np.random.uniform(low=1.0-self.factor, high=1.0+self.factor, size=1)
+        image = (image * (1 + factor)).astype(image.dtype)
+        data.update({"image": image})
         return data
 
 
@@ -176,64 +128,120 @@ class GaussianNoise:
 
     def __call__(self, data):
         image = data["image"]
-        for i in range(1):
-            scale = np.random.uniform(low=0.0, high=self.std)
-            noise = np.random.normal(loc=self.mean, scale=scale, size=image.shape).astype(image.dtype)
-            data.update({"image": image + noise})
+        # for i in range(10):
+        scale = np.random.uniform(low=0.0, high=self.std)
+        noise = np.random.normal(loc=self.mean, scale=scale, size=image.shape).astype(image.dtype)
+        data.update({"image": image + noise})
         return data
 
 
-# class PytTrain(Dataset):
-#     def __init__(self, images, labels, **kwargs):
-#         self.images, self.labels = images, labels
-#         self.train_transforms = get_train_transforms()
-#         patch_size, oversampling = kwargs["patch_size"], kwargs["oversampling"]
-#         self.patch_size = patch_size
-#         self.rand_crop = RandBalancedCrop(patch_size=patch_size, oversampling=oversampling)
+import time
+import numpy as np
+import pandas as pd
+from torch.utils.data import Dataset
+def slow_worker(images, labels, patch_size, oversampling, transforms,slow_queue, slow_processed_queue):
+    rand_crop = RandBalancedCrop(patch_size=patch_size, oversampling=oversampling)
+    while True:
+        idx = slow_queue.get()
+        if idx is None:
+            break  # Signal to stop
+        try:
+            data = {"image": np.load(images[idx]), "label": np.load(labels[idx])}
+            data = rand_crop(data)
+            for transform in transforms.transforms:
+                data = transform(data)
+            slow_processed_queue.put(( data["image"], data["label"]))
+        except Exception as e:
+            print(f"[Slow Worker] Failed processing idx {idx}: {e}")
 
-#     def __len__(self):
-#         return len(self.images)
-
-#     def __getitem__(self, idx):
-#         data = {"image": np.load(self.images[idx]), "label": np.load(self.labels[idx])}
-#         data = self.rand_crop(data)
-#         data = self.train_transforms(data)
-#         return data["image"], data["label"]
+import os
+import numpy as np
+from torch.utils.data import Dataset
+import concurrent.futures
+import torch.multiprocessing as mp
 
 class PytTrain(Dataset):
-    def __init__(self, images, labels, **kwargs):
-        self.images, self.labels = images, labels
+    def __init__(self, images, labels, slow_queue, slow_processed_queue, **kwargs):
+        """
+        images, labels: list of file paths
+        patch_size, oversampling: for RandBalancedCrop
+        transforms: data augmentations
+        num_slow_workers: number of background slow workers
+        sample_timeout: per-sample timeout in seconds
+        """
+        self.images = images
+        self.labels = labels
         self.train_transforms = get_train_transforms()
-        patch_size, oversampling = kwargs["patch_size"], kwargs["oversampling"]
-        self.patch_size = patch_size
-        self.oversampling = oversampling
-        self.rand_crop = RandBalancedCrop(patch_size=patch_size, oversampling=oversampling)
+        self.patch_size = kwargs["patch_size"]
+        self.oversampling = kwargs["oversampling"]
+        self.rand_crop = RandBalancedCrop(patch_size=self.patch_size,
+                                          oversampling=self.oversampling)
+        self.slow_queue = slow_queue
+        self.slow_processed_queue = slow_processed_queue
+        self.sample_timeout = kwargs.get("sample_timeout", 0.7)
+        self.num_slow_workers = kwargs.get("num_slow_workers", 4)
 
-        # Timeout budget per sample (seconds)
-        self.sample_timeout = 0.6
+        # Persistent executor for fast samples
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=12)
+
+        # Start multiple slow workers
+        self.slow_workers = []
+        for _ in range(self.num_slow_workers):
+            p = mp.Process(target=self._slow_worker,
+                           args=(self.images, self.labels, self.patch_size,
+                                 self.oversampling, self.train_transforms,
+                                 self.slow_queue, self.slow_processed_queue))
+            p.daemon = True
+            p.start()
+            self.slow_workers.append(p)
 
     def __len__(self):
         return len(self.images)
 
     def _preprocess_sample(self, idx):
-        """Preprocessing logic."""
+        """Fast preprocessing logic."""
         data = {"image": np.load(self.images[idx]), "label": np.load(self.labels[idx])}
         data = self.rand_crop(data)
         for transform in self.train_transforms.transforms:
             data = transform(data)
         return data["image"], data["label"]
 
+    @staticmethod
+    def _slow_worker(images, labels, patch_size, oversampling, transforms,
+                     slow_queue, slow_processed_queue):
+        """Background worker for slow samples."""
+        rand_crop = RandBalancedCrop(patch_size=patch_size, oversampling=oversampling)
+        while True:
+            idx = slow_queue.get()
+            if idx is None:
+                break
+            try:
+                data = {"image": np.load(images[idx]), "label": np.load(labels[idx])}
+                data = rand_crop(data)
+                for transform in transforms.transforms:
+                    data = transform(data)
+                slow_processed_queue.put((data["image"], data["label"]))
+            except Exception as e:
+                print(f"[Slow Worker] Failed idx {idx}: {e}", flush=True)
+
     def __getitem__(self, idx):
-        start_time = time.time()
-        image, label = self._preprocess_sample(idx)
-        end_time = time.time()
+        """Try fast preprocessing; fallback to slow queue if timeout."""
+        future = self.executor.submit(self._preprocess_sample, idx)
+        try:
+            image, label = future.result(timeout=self.sample_timeout)
+            return image, label
+        except concurrent.futures.TimeoutError:
+            # Sample is too slow → move to slow queue
+            self.slow_queue.put(idx)
+            return None  # Training loop should fetch from slow_processed_queue
 
-        duration = end_time - start_time
-        tag = "S" if duration <= self.sample_timeout else "L"
-
-        return image, label, tag
-
-
+    def shutdown(self):
+        """Cleanly stop slow workers and executor."""
+        for _ in range(self.num_slow_workers):
+            self.slow_queue.put(None)
+        for p in self.slow_workers:
+            p.join()
+        self.executor.shutdown(wait=True)
 
 
 class PytVal(Dataset):
